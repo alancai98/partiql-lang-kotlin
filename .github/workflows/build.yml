@@ -27,29 +27,24 @@ jobs:
         uses: actions/setup-java@v1
         with:
           java-version: 11
-      - run: ./gradlew build
+      - run: ./gradlew build jacocoTestReport
       - uses: codecov/codecov-action@v1
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
           directory: /cli/build/reports/
           flags: CLI
       - uses: codecov/codecov-action@v1
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
           directory: /lang/build/reports/
           flags: LANG
       - uses: codecov/codecov-action@v1
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
           directory: /pts/build/reports/
           flags: PTS
       - uses: codecov/codecov-action@v1
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
           directory: /testscript/build/reports/
           flags: TEST_SCRIPT
       - uses: codecov/codecov-action@v1
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
           directory: /examples/build/reports/
           flags: EXAMPLES
