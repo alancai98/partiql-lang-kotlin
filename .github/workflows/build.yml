@@ -30,21 +30,21 @@ jobs:
       - run: ./gradlew build jacocoTestReport
       - uses: codecov/codecov-action@v1
         with:
-          directory: /cli/build/reports/
+          directory: cli/build/reports
           flags: CLI
       - uses: codecov/codecov-action@v1
         with:
-          directory: /lang/build/reports/
+          directory: lang/build/reports
           flags: LANG
       - uses: codecov/codecov-action@v1
         with:
-          directory: /pts/build/reports/
+          directory: pts/build/reports
           flags: PTS
       - uses: codecov/codecov-action@v1
         with:
-          directory: /testscript/build/reports/
+          directory: testscript/build/reports
           flags: TEST_SCRIPT
       - uses: codecov/codecov-action@v1
         with:
-          directory: /examples/build/reports/
+          directory: examples/build/reports
           flags: EXAMPLES
