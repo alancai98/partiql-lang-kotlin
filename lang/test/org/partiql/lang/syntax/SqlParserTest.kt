@@ -3072,4 +3072,62 @@ class SqlParserTest : SqlParserTestBase() {
     //****************************************
     // LET clause parsing
     //****************************************
+
+    private val projectX = PartiqlAst.build { projectList(projectExpr(id("x"))) }
+
+    @Test
+    fun selectFromLetTest() = assertExpression("SELECT x FROM table1 LET 1 AS A") {
+        select(
+            project = projectX,
+            from = scan(id("table1")),
+            fromLet = let(letBinding(lit(ionInt(1)), "A"))
+        )
+    }
+
+    @Test
+    fun selectFromLetTwoBindingsTest() = assertExpression("SELECT x FROM table1 LET 1 AS A, 2 AS B") {
+        select(
+            project = projectX,
+            from = scan(id("table1")),
+            fromLet = let(letBinding(lit(ionInt(1)), "A"), letBinding(lit(ionInt(2)), "B"))
+        )
+    }
+
+    @Test
+    fun selectFromLetTableBindingTest() = assertExpression("SELECT x FROM table1 LET table1 AS A") {
+        select(
+            project = projectX,
+            from = scan(id("table1")),
+            fromLet = let(letBinding(id("table1"), "A"))
+        )
+    }
+
+    @Test
+    fun selectFromLetFunctionBindingTest() = assertExpression("SELECT x FROM table1 LET foo() AS A") {
+        select(
+            project = projectX,
+            from = scan(id("table1")),
+            fromLet = let(letBinding(call("foo", emptyList()), "A"))
+        )
+    }
+
+    @Test
+    fun selectFromLetFunctionWithLiteralsTest() = assertExpression(
+        "SELECT x FROM table1 LET foo(42, 'bar') AS A") {
+        select(
+            project = projectX,
+            from = scan(id("table1")),
+            fromLet = let(letBinding(call("foo", listOf(lit(ionInt(42)), lit(ionString("bar")))), "A"))
+        )
+    }
+
+    @Test
+    fun selectFromLetFunctionWithVariablesTest() = assertExpression(
+        "SELECT x FROM table1 LET foo(table1) AS A") {
+        select(
+            project = projectX,
+            from = scan(id("table1")),
+            fromLet = let(letBinding(call("foo", listOf(id("table1"))), "A"))
+        )
+    }
 }
