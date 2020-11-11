@@ -1310,7 +1310,7 @@ class SqlParser(private val ion: IonSystem) : Parser {
                 }
 
                 val asterisk = list.children.firstOrNull { it.type == ParseType.PROJECT_ALL && it.children.isEmpty() }
-                if(asterisk != null
+                if (asterisk != null
                    && list.children.size > 1) {
                     asterisk.token.err(
                         "Other expressions may not be present in the select list when '*' is used without dot notation.",
