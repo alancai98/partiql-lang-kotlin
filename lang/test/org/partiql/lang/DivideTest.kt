@@ -9,8 +9,8 @@ class DivideTest {
         assertEquals(2, Divide().divide(4, 2))
     }
 
-//    @Test
-//    fun invalidDivideTest() {
-//        assertEquals(0, Divide().divide(4, 0))
-//    }
+    @Test
+    fun invalidDivideTest() {
+        assertEquals(0, Divide().divide(4, 0))
+    }
 }
