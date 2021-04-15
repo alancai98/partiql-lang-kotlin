@@ -25,7 +25,7 @@ Option                                Description
 -i, --input <File>                    input file, requires the query option (default: stdin)
 -o, --output <File>                   output file, requires the query option (default: stdout)
 --of, --output-format <OutputFormat:  output format, requires the query option (default: PARTIQL)
-  (ION_TEXT|ION_BINARY|PARTIQL)>
+  (ION_TEXT|ION_BINARY|PARTIQL|PARTIQL_PRETTY)>
 -q, --query <String>                  PartiQL query, triggers non interactive mode
 ```
 
@@ -129,93 +129,6 @@ PartiQL> 1 + 1
       (
         lit
         1
-      )
-    )
-  )
-)
----
-OK!
-```
-
-To view the AST with metadata information of an SQL statement, type one and press enter only *once*, 
-then type `!?` and press enter:
-
-```
-PartiQL> 1 + 1
-   | !?
-==='
-
-(
-  ast
-  (
-    version
-    1
-  )
-  (
-    root
-    (
-      term
-      (
-        exp
-        (
-          +
-          (
-            term
-            (
-              exp
-              (
-                lit
-                1
-              )
-            )
-            (
-              meta
-              (
-                $source_location
-                (
-                  {
-                    line_num:1,
-                    char_offset:1
-                  }
-                )
-              )
-            )
-          )
-          (
-            term
-            (
-              exp
-              (
-                lit
-                1
-              )
-            )
-            (
-              meta
-              (
-                $source_location
-                (
-                  {
-                    line_num:1,
-                    char_offset:5
-                  }
-                )
-              )
-            )
-          )
-        )
-      )
-      (
-        meta
-        (
-          $source_location
-          (
-            {
-              line_num:1,
-              char_offset:3
-            }
-          )
-        )
       )
     )
   )

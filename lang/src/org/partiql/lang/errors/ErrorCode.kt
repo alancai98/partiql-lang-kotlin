@@ -120,6 +120,26 @@ enum class ErrorCode(private val category: ErrorCategory,
         LOC_TOKEN,
         "expected WHEN clause in CASE"),
 
+    PARSE_EXPECTED_WHERE_CLAUSE(
+            ErrorCategory.PARSER,
+            LOC_TOKEN,
+            "expected WHERE clause"),
+
+    PARSE_EXPECTED_CONFLICT_ACTION(
+            ErrorCategory.PARSER,
+            LOC_TOKEN,
+            "expected <conflict action>"),
+
+    PARSE_EXPECTED_RETURNING_CLAUSE(
+            ErrorCategory.PARSER,
+            LOC_TOKEN,
+            "expected <returning mapping>"),
+
+    PARSE_UNSUPPORTED_RETURNING_CLAUSE_SYNTAX(
+            ErrorCategory.PARSER,
+            LOC_TOKEN,
+            "unsupported syntax in RETURNING clause"),
+
     PARSE_UNSUPPORTED_TOKEN(
         ErrorCategory.PARSER,
         LOC_TOKEN,
@@ -252,6 +272,21 @@ enum class ErrorCode(private val category: ErrorCategory,
         LOC_TOKEN,
         "invalid value used for type parameter"),
 
+    PARSE_INVALID_PRECISION_FOR_TIME(
+        ErrorCategory.PARSER,
+        LOC_TOKEN,
+        "invalid precision used for TIME type"),
+
+    PARSE_INVALID_DATE_STRING(
+        ErrorCategory.PARSER,
+        LOC_TOKEN,
+        "expected date string to be of the format YYYY-MM-DD"),
+
+    PARSE_INVALID_TIME_STRING(
+        ErrorCategory.PARSER,
+        LOC_TOKEN,
+        "expected time string to be of the format HH:MM:SS[.dddd...][+|-HH:MM]"),
+
     PARSE_EMPTY_SELECT(
         ErrorCategory.PARSER,
         LOC_TOKEN,
@@ -296,6 +331,11 @@ enum class ErrorCode(private val category: ErrorCategory,
         ErrorCategory.PARSER,
         LOC_TOKEN,
         "Aggregate function calls take 1 argument only"),
+
+    PARSE_NO_STORED_PROCEDURE_PROVIDED(
+        ErrorCategory.PARSER,
+        LOC_TOKEN,
+        "No stored procedure provided"),
 
     PARSE_MALFORMED_JOIN(
         ErrorCategory.PARSER,
@@ -407,15 +447,43 @@ enum class ErrorCode(private val category: ErrorCategory,
                 "No such function: ${errorContext?.get(Property.FUNCTION_NAME)?.stringValue() ?: UNKNOWN} "
         },
 
+    EVALUATOR_NO_SUCH_PROCEDURE(
+        ErrorCategory.EVALUATOR,
+        LOCATION + setOf(Property.PROCEDURE_NAME),
+        ""){
+            override fun getErrorMessage(errorContext: PropertyValueMap?): String =
+                "No such stored procedure: ${errorContext?.get(Property.PROCEDURE_NAME)?.stringValue() ?: UNKNOWN} "
+        },
+
     EVALUATOR_INCORRECT_NUMBER_OF_ARGUMENTS_TO_FUNC_CALL(
         ErrorCategory.EVALUATOR,
         LOCATION + setOf(Property.EXPECTED_ARITY_MIN, Property.EXPECTED_ARITY_MAX),
         "Incorrect number of arguments to function call"),
 
+    EVALUATOR_INCORRECT_NUMBER_OF_ARGUMENTS_TO_PROCEDURE_CALL(
+        ErrorCategory.EVALUATOR,
+        LOCATION + setOf(Property.EXPECTED_ARITY_MIN, Property.EXPECTED_ARITY_MAX),
+        "Incorrect number of arguments to procedure call"),
+
+    EVALUATOR_DATE_FIELD_OUT_OF_RANGE(
+        ErrorCategory.EVALUATOR,
+        LOCATION,
+        "Date field out of range."),
+
     EVALUATOR_INCORRECT_TYPE_OF_ARGUMENTS_TO_FUNC_CALL(
         ErrorCategory.EVALUATOR,
         LOCATION + setOf(Property.EXPECTED_ARGUMENT_TYPES, Property.ACTUAL_ARGUMENT_TYPES, Property.FUNCTION_NAME),
         "Incorrect type of arguments to function call") {
+        override fun getErrorMessage(errorContext: PropertyValueMap?): String =
+            "Invalid argument types for ${errorContext?.get(Property.FUNCTION_NAME) ?: UNKNOWN}, " +
+            "expected: ${errorContext?.get(Property.EXPECTED_ARGUMENT_TYPES) ?: UNKNOWN} " +
+            "got: ${errorContext?.get(Property.ACTUAL_ARGUMENT_TYPES) ?: UNKNOWN}"
+    },
+
+    EVALUATOR_INCORRECT_TYPE_OF_ARGUMENTS_TO_PROCEDURE_CALL(
+        ErrorCategory.EVALUATOR,
+        LOCATION + setOf(Property.EXPECTED_ARGUMENT_TYPES, Property.ACTUAL_ARGUMENT_TYPES, Property.FUNCTION_NAME),
+        "Incorrect type of arguments to procedure call") {
         override fun getErrorMessage(errorContext: PropertyValueMap?): String =
             "Invalid argument types for ${errorContext?.get(Property.FUNCTION_NAME) ?: UNKNOWN}, " +
             "expected: ${errorContext?.get(Property.EXPECTED_ARGUMENT_TYPES) ?: UNKNOWN} " +

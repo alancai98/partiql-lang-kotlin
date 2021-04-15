@@ -14,20 +14,19 @@
 
 package org.partiql.lang
 
+import com.amazon.ion.*
 import com.amazon.ion.system.IonSystemBuilder
+import org.assertj.core.api.*
 import org.partiql.lang.ast.*
-import org.partiql.lang.ast.passes.*
+import org.partiql.lang.eval.*
 import org.partiql.lang.errors.*
-import junitparams.JUnitParamsRunner
+import org.partiql.lang.util.*
 import org.junit.Assert
 import org.junit.runner.RunWith
 import java.util.*
-
-import org.partiql.lang.errors.Property.*
-import org.partiql.lang.eval.*
-import org.partiql.lang.util.*
-import org.assertj.core.api.*
-import com.amazon.ion.*
+import junitparams.JUnitParamsRunner
+import org.partiql.lang.ast.passes.AstRewriterBase
+import java.time.LocalDate
 import kotlin.reflect.*
 
 
@@ -43,6 +42,8 @@ abstract class TestBase : Assert() {
         is Int       -> valueFactory.newInt(value)
         is Decimal   -> valueFactory.newDecimal(value)
         is Timestamp -> valueFactory.newTimestamp(value)
+        is LocalDate -> valueFactory.newDate(value)
+        is Double    -> valueFactory.newFloat(value)
         else         ->
             error("Can't convert receiver to ExprValue (please extend this function to support the receiver's data type).")
     }

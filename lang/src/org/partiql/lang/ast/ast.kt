@@ -103,6 +103,15 @@ sealed class ExprNode : AstNode(), HasMetas {
             is Parameter       -> {
                 copy(metas = metas)
             }
+            is Exec            -> {
+                copy(metas = metas)
+            }
+            is DateTimeType.Date -> {
+                copy(metas = metas)
+            }
+            is DateTimeType.Time -> {
+                copy(metas = metas)
+            }
         }
     }
 }
@@ -211,6 +220,19 @@ data class Typed(
 }
 
 //********************************
+// Stored procedure clauses
+//********************************
+
+/** Represents a call to a stored procedure, i.e. `EXEC stored_procedure [<expr>.*]` */
+data class Exec(
+    val procedureName: SymbolicName,
+    val args: List<ExprNode>,
+    override val metas: MetaContainer
+) : ExprNode() {
+    override val children: List<AstNode> = args
+}
+
+//********************************
 // Path expressions
 //********************************
 
@@ -274,53 +296,111 @@ sealed class DataManipulationOperation(val name: String) : AstNode()
 
 /** Represents `FROM <fromSource> WHERE <whereExpr> <dataManipulationOperation> */
 data class DataManipulation(
-    val dmlOperation: DataManipulationOperation,
+    val dmlOperations: DmlOpList,
     val from: FromSource? = null,
     val where: ExprNode? = null,
+    val returning: ReturningExpr? = null,
     override val metas: MetaContainer
 ) : ExprNode() {
     override val children: List<AstNode> =
-        dmlOperation.children + listOfNotNull(from, where, dmlOperation)
+        dmlOperations.children + listOfNotNull(from, where, returning, dmlOperations)
+}
+
+data class DmlOpList(val ops: List<DataManipulationOperation>) : AstNode() {
+    override val children: List<AstNode> get() = ops
 }
 
 /** Represents `INSERT INTO <lvalueExpr> <valuesExpr>` */
-data class InsertOp(val lvalue: ExprNode, val values: ExprNode
+data class InsertOp(
+    val lvalue: ExprNode,
+    val values: ExprNode
 ) : DataManipulationOperation(name = "insert") {
     override val children: List<AstNode> = listOf(lvalue, values)
 }
 
-
-/** Represents `INSERT INTO <lvalueExpr> VALUE <valueExpr> [AT <position>]` */
-data class InsertValueOp(val lvalue: ExprNode, val value: ExprNode, val position: ExprNode?
+/** Represents `INSERT INTO <lvalueExpr> VALUE <valueExpr> [AT <position>] [ON CONFLICT WHERE <Expr> <CONFLICT ACTION>]` */
+data class InsertValueOp(
+    val lvalue: ExprNode,
+    val value: ExprNode,
+    val position: ExprNode?,
+    val onConflict: OnConflict?
 ): DataManipulationOperation(name = "insert_value") {
-    override val children: List<AstNode> = listOfNotNull(lvalue, value, position)
+    override val children: List<AstNode> = listOfNotNull(lvalue, value, position, onConflict)
 }
 
+data class OnConflict(val condition: ExprNode, val conflictAction: ConflictAction
+) : AstNode() {
+    override val children: List<AstNode> = listOf(condition)
+}
+
+/** ConflictAction */
+enum class ConflictAction {
+    /** Represents DO NOTHING action in ON CONFLICT operation */
+    DO_NOTHING
+}
 
 data class Assignment(val lvalue: ExprNode, val rvalue: ExprNode) : AstNode() {
     override val children: List<AstNode> = listOf(lvalue, rvalue)
+}
 
+data class InsertReturning(
+    val ops: List<DataManipulationOperation>,
+    val returning: ReturningExpr? = null
+) : AstNode() {
+    override val children: List<AstNode> get() = ops
 }
 
 /**
  * Represents `SET <lvalueExpr> = <rvalueExpr>...`
  */
-data class AssignmentOp(val assignments: List<Assignment>) : DataManipulationOperation(name = "set") {
-    override val children: List<AstNode> get() = assignments
+data class AssignmentOp(val assignment: Assignment) : DataManipulationOperation(name = "set") {
+    override val children: List<AstNode> get() = listOf(assignment)
 }
-
 
 /** Represents `REMOVE <lvalueExpr>` */
 data class RemoveOp(val lvalue: ExprNode) : DataManipulationOperation(name = "remove") {
     override val children: List<AstNode> get() = listOf(lvalue)
 }
 
-
 /** Represents a legacy SQL `DELETE` whose target is implicit (over the `FROM`/`WHERE` clause) */
 object DeleteOp : DataManipulationOperation(name = "delete") {
     override val children: List<AstNode> get() = emptyList()
 }
 fun DeleteOp() = DeleteOp
+
+/** Represents `RETURNING <returning element> [ ',' <returning element>]*` */
+data class ReturningExpr(
+    val returningElems: List<ReturningElem>
+): AstNode() {
+    override val children: List<AstNode> = returningElems
+}
+
+/** Represents `<returning mapping> <column_expr>` */
+data class ReturningElem(
+    val returningMapping: ReturningMapping,
+    val columnComponent: ColumnComponent
+): AstNode() {
+    override val children: List<AstNode> = listOf(columnComponent)
+}
+
+sealed class ColumnComponent : AstNode()
+
+data class ReturningColumn(val column: ExprNode) : ColumnComponent() {
+    override val children: List<AstNode> get() = listOf(column)
+}
+
+/** Represents an `*` that is not part of a path expression in a Returning column, i.e. `RETURNING ALL OLD *`  */
+data class ReturningWildcard(override val metas: MetaContainer) : ColumnComponent(), HasMetas {
+    override val children: List<AstNode> = listOf()
+}
+
+/** Represents ( MODIFIED | ALL ) ( NEW | OLD ) */
+enum class ReturningMapping {
+    MODIFIED_NEW,
+    MODIFIED_OLD,
+    ALL_NEW,
+    ALL_OLD
+}
 
 //********************************
 // Select Expression
@@ -337,10 +417,11 @@ data class Select(
     val where: ExprNode? = null,
     val groupBy: GroupBy? = null,
     val having: ExprNode? = null,
+    val orderBy: OrderBy? = null,
     val limit: ExprNode? = null,
     override val metas: MetaContainer
 ) : ExprNode() {
-    override val children: List<AstNode> = listOfNotNull(projection, from, fromLet, where, groupBy, having, limit)
+    override val children: List<AstNode> = listOfNotNull(projection, from, fromLet, where, groupBy, having, orderBy, limit)
 }
 
 //********************************
@@ -669,6 +750,22 @@ data class GroupByItem(
     override val children: List<AstNode> = listOf(expr)
 }
 
+/**
+ * TODO: Support NULLS FIRST | NULLS LAST
+ * `ORDER BY ( <orderingExpression> [ ASC|DESC ] ? `
+ */
+data class OrderBy(
+    val sortSpecItems: List<SortSpec>
+): AstNode() {
+    override val children: List<AstNode> = sortSpecItems
+}
+
+data class SortSpec(
+    val expr: ExprNode,
+    val orderingSpec: OrderingSpec
+): AstNode() {
+    override val children: List<AstNode> = listOf(expr)
+}
 //********************************
 // Constructors
 //********************************
@@ -866,6 +963,59 @@ enum class GroupingStrategy {
     PARTIAL
 }
 
+/** Ordering specification */
+enum class OrderingSpec {
+    /** Represents */
+    ASC,
+    DESC
+}
+
+/**
+ * The sealed class includes all the datetime types such as DATE, TIME, TIMESTAMP
+ * Note that the ast nodes corresponding to the DATE, TIME and TIMESTAMP here are different from the [Literal] nodes.
+ * You can create an Ion literal as [Timestamp] which will correspond to the [Literal] node and will have the type
+ * [SqlDataType.TIMESTAMP]. However that will be different from the
+ * `TIMESTAMP` here.
+ * Note: TIME and TIMESTAMP are yet to be added.
+ */
+sealed class DateTimeType : ExprNode() {
+    /**
+     * AST Node corresponding to the DATE literal
+     */
+    data class Date(
+        val year: Int,
+        val month: Int,
+        val day: Int,
+        override val metas: MetaContainer
+    ) : DateTimeType() {
+        override val children: List<AstNode> = listOf()
+    }
+
+    /**
+     * AST node representing the TIME literal.
+     *
+     * @param hour represents the hour value.
+     * @param minute represents the minute value.
+     * @param second represents the second value.
+     * @param nano represents the fractional part of the second up to the nanoseconds' precision.
+     * @param precision is an optional parameter which, if specified, represents the precision of the fractional second.
+     * The default precision is 9 or nanosecond.
+     * @param tz_minutes is the optional time zone in minutes which can be specified with "WITH TIME ZONE".
+     * If [tz_minutes] is null, that means the time zone is undefined.
+     */
+    data class Time(
+        val hour: Int,
+        val minute: Int,
+        val second: Int,
+        val nano: Int,
+        val precision: Int = 9,
+        val tz_minutes: Int? = null,
+        override val metas: MetaContainer
+    ) : DateTimeType() {
+        override val children: List<AstNode> = listOf()
+    }
+}
+
 /**
  * Indicates strategy for binding lookup within scopes.
  */
@@ -902,6 +1052,8 @@ enum class SqlDataType(val typeName: String, val arityRange: IntRange) {
     TUPLE("tuple", 0..0), // PartiQL
     LIST("list", 0..0), // Ion
     SEXP("sexp", 0..0), // Ion
+    DATE("date", 0..0), // SQL-92
+    TIME("time", 0..0), // SQL-92
     BAG("bag", 0..0);  // PartiQL
 
     companion object {

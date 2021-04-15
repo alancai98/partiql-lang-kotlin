@@ -16,20 +16,27 @@ package org.partiql.lang.syntax
 
 import com.amazon.ion.IonSexp
 import com.amazon.ionelement.api.IonElement
+import com.amazon.ionelement.api.IonElementLoaderOptions
 import com.amazon.ionelement.api.SexpElement
 import com.amazon.ionelement.api.toIonElement
+import com.amazon.ionelement.api.loadSingleElement
 import com.amazon.ionelement.api.toIonValue
 import org.partiql.lang.TestBase
 import org.partiql.lang.ast.AstDeserializerBuilder
 import org.partiql.lang.ast.AstSerializer
 import org.partiql.lang.ast.AstVersion
+import org.partiql.lang.ast.DataManipulation
 import org.partiql.lang.ast.ExprNode
 import org.partiql.lang.ast.passes.MetaStrippingRewriter
+import org.partiql.lang.ast.toAstExpr
 import org.partiql.lang.ast.toAstStatement
 import org.partiql.lang.ast.toExprNode
 import org.partiql.lang.domains.PartiqlAst
+import org.partiql.lang.errors.ErrorCode
+import org.partiql.lang.errors.Property
 import org.partiql.lang.util.asIonSexp
 import org.partiql.lang.util.filterMetaNodes
+import org.partiql.lang.util.softAssert
 import org.partiql.pig.runtime.toIonElement
 
 abstract class SqlParserTestBase : TestBase() {
@@ -51,6 +58,26 @@ abstract class SqlParserTestBase : TestBase() {
         partiqlAssert(parsedExprNode, partiqlAst, source)
 
         pigDomainAssert(parsedExprNode, partiqlAst.toIonElement().asSexp())
+        pigExprNodeTransformAsserts(parsedExprNode)
+    }
+
+    // TODO: refactor the signature with pig builder
+    protected fun assertExpression(
+            source: String,
+            expectedSexpAstAsString: String
+    ) {
+        val parsedExprNode = parse(source)
+        val expectedSexpAst = loadSingleElement(
+            expectedSexpAstAsString,
+            IonElementLoaderOptions(includeLocationMeta = false)
+        ).asSexp()
+
+        val parsedExprNodeIonElement = when (parsedExprNode) {
+            is DataManipulation -> parsedExprNode.toAstStatement().toIonElement()
+            else -> parsedExprNode.toAstExpr().toIonElement()
+        }
+        assertRoundTripIonElementToPartiQlAst(parsedExprNodeIonElement, expectedSexpAst)
+        assertRoundTripPartiQlAstToExprNode(parsedExprNode.toAstStatement(), expectedSexpAst, parsedExprNode)
         pigExprNodeTransformAsserts(parsedExprNode)
     }
 
@@ -84,7 +111,7 @@ abstract class SqlParserTestBase : TestBase() {
 
     private fun serializeAssert(astVersion: AstVersion, parsedExprNode: ExprNode, expectedSexpAst: IonSexp, source: String) {
 
-        val actualSexpAstWithoutMetas = AstSerializer.serialize(parsedExprNode, astVersion, ion).filterMetaNodes() as IonSexp
+        val actualSexpAstWithoutMetas = AstSerializer.serialize(parsedExprNode, astVersion, ion).filterMetaNodes()
 
         val deserializer = AstDeserializerBuilder(ion).build()
         assertSexpEquals(expectedSexpAst, actualSexpAstWithoutMetas, "$astVersion AST, $source")
@@ -103,9 +130,10 @@ abstract class SqlParserTestBase : TestBase() {
      */
     private fun unwrapQuery(statement: PartiqlAst.Statement) : SexpElement {
        return when (statement) {
-            is PartiqlAst.Statement.Query -> statement.expr.toIonElement()
-            is PartiqlAst.Statement.Dml,
-            is PartiqlAst.Statement.Ddl -> statement.toIonElement()
+           is PartiqlAst.Statement.Query -> statement.expr.toIonElement()
+           is PartiqlAst.Statement.Dml,
+           is PartiqlAst.Statement.Ddl,
+           is PartiqlAst.Statement.Exec -> statement.toIonElement()
         }
     }
 
@@ -193,4 +221,21 @@ abstract class SqlParserTestBase : TestBase() {
     private fun loadIonSexp(expectedSexpAst: String) = ion.singleValue(expectedSexpAst).asIonSexp()
     private fun ExprNode.stripMetas() = MetaStrippingRewriter.stripMetas(this)
 
+    protected fun checkInputThrowingParserException(input: String,
+                                                  errorCode: ErrorCode,
+                                                  expectErrorContextValues: Map<Property, Any>) {
+
+        softAssert {
+            try {
+                parser.parseExprNode(input)
+                fail("Expected ParserException but there was no Exception")
+            }
+            catch (pex: ParserException) {
+                checkErrorAndErrorContext(errorCode, pex, expectErrorContextValues)
+            }
+            catch (ex: Exception) {
+                fail("Expected ParserException but a different exception was thrown \n\t  $ex")
+            }
+        }
+    }
 }

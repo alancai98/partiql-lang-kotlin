@@ -28,12 +28,15 @@ internal fun createBuiltinFunctions(valueFactory: ExprValueFactory) =
         DateAddExprFunction(valueFactory),
         DateDiffExprFunction(valueFactory),
         ExtractExprFunction(valueFactory),
+        MakeDateExprFunction(valueFactory),
         NullIfExprFunction(valueFactory),
         SubstringExprFunction(valueFactory),
         TrimExprFunction(valueFactory),
         ToStringExprFunction(valueFactory),
         ToTimestampExprFunction(valueFactory),
-        SizeExprFunction(valueFactory))
+        SizeExprFunction(valueFactory),
+        FromUnixTimeFunction(valueFactory),
+        UnixTimestampFunction(valueFactory))
 
 
 internal fun createExists(valueFactory: ExprValueFactory): ExprFunction = object : ExprFunction {

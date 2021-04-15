@@ -14,7 +14,8 @@
 
 package org.partiql.lang.syntax
 
-import org.partiql.lang.syntax.TokenType.*
+import org.partiql.lang.syntax.TokenType.KEYWORD
+import org.partiql.lang.syntax.TokenType.OPERATOR
 
 @JvmField internal val TRIM_SPECIFICATION_KEYWORDS = setOf("both", "leading", "trailing")
 
@@ -245,9 +246,10 @@ internal val DATE_PART_KEYWORDS: Set<String> = DatePart.values()
     "work",
     "write",
     "zone"
-).union(TRIM_SPECIFICATION_KEYWORDS)
+)
 // Note: DATE_PART_KEYWORDs are not keywords in the traditional sense--they are only keywords within
 // the context of the DATE_ADD, DATE_DIFF and EXTRACT functions, for which [SqlParser] has special support.
+// Similarly, TRIM_SPECIFICATION_KEYWORDS are only keywords within the context of the TRIM function.
 
 /** PartiQL additional keywords. */
 @JvmField internal val SQLPP_KEYWORDS = setOf(
@@ -258,6 +260,14 @@ internal val DATE_PART_KEYWORDS: Set<String> = DatePart.values()
     "tuple",
     "remove",
     "index",
+    "conflict",
+    "do",
+    "nothing",
+    "returning",
+    "modified",
+    "all",
+    "new",
+    "old",
     "let",
 
     // Ion type names
@@ -311,6 +321,7 @@ internal val DATE_PART_KEYWORDS: Set<String> = DatePart.values()
     "decimal"           to 0..2, // Ion & SQL-92
     "numeric"           to 0..2, // SQL-92
     "timestamp"         to 0..0, // Ion & SQL-92
+    "date"              to 0..0, // PartiQL & SQL-92
     "character"         to 0..1, // SQL-92
     "character_varying" to 0..1, // SQL-92
     "string"            to 0..0, // Ion
@@ -424,7 +435,13 @@ internal val DATE_PART_KEYWORDS: Set<String> = DatePart.values()
     listOf("outer", "cross", "join")    to ("outer_cross_join" to KEYWORD),
     listOf("full", "outer",
            "cross", "join")             to ("outer_cross_join" to KEYWORD),
-    listOf("insert", "into")            to ("insert_into" to KEYWORD)
+    listOf("insert", "into")            to ("insert_into" to KEYWORD),
+    listOf("on", "conflict")            to ("on_conflict" to KEYWORD),
+    listOf("do", "nothing")             to ("do_nothing" to KEYWORD),
+    listOf("modified", "old")           to ("modified_old" to KEYWORD),
+    listOf("modified", "new")           to ("modified_new" to KEYWORD),
+    listOf("all", "old")                to ("all_old" to KEYWORD),
+    listOf("all", "new")                to ("all_new" to KEYWORD)
 )
 
 @JvmField internal val MULTI_LEXEME_MIN_LENGTH = MULTI_LEXEME_TOKEN_MAP.keys.map { it.size }.min()!!

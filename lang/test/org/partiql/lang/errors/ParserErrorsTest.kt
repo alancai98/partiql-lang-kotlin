@@ -13,34 +13,13 @@
  */
 
 package org.partiql.lang.errors
-import org.partiql.lang.*
-import org.partiql.lang.syntax.SqlParser
-import org.partiql.lang.syntax.ParserException
+import com.amazon.ion.Timestamp
 import org.partiql.lang.syntax.TokenType
 import org.partiql.lang.util.*
 import org.junit.*
+import org.partiql.lang.syntax.SqlParserTestBase
 
-class ParserErrorsTest : TestBase() {
-
-    private val parser = SqlParser(ion)
-
-    private fun checkInputThrowingParserException(input: String,
-                                                  errorCode: ErrorCode,
-                                                  expectErrorContextValues: Map<Property, Any>) {
-
-        softAssert {
-            try {
-                parser.parseExprNode(input)
-                fail("Expected ParserException but there was no Exception")
-            }
-            catch (pex: ParserException) {
-                checkErrorAndErrorContext(errorCode, pex, expectErrorContextValues)
-            }
-            catch (ex: Exception) {
-                fail("Expected ParserException but a different exception was thrown \n\t  $ex")
-            }
-        }
-    }
+class ParserErrorsTest : SqlParserTestBase() {
 
     @Test
     fun expectedKeyword() {
@@ -61,7 +40,7 @@ class ParserErrorsTest : TestBase() {
             mapOf(
                 Property.LINE_NUMBER to 1L,
                 Property.COLUMN_NUMBER to 9L,
-                Property.TOKEN_TYPE to TokenType.LITERAL,
+                Property.TOKEN_TYPE to TokenType.ION_LITERAL,
                 Property.TOKEN_VALUE to ion.newNull()))
 
     }
@@ -551,7 +530,7 @@ class ParserErrorsTest : TestBase() {
                                           ErrorCode.PARSE_EXPECTED_TYPE_NAME,
                                           mapOf(Property.LINE_NUMBER to 1L,
                                                 Property.COLUMN_NUMBER to 13L,
-                                                Property.TOKEN_TYPE to TokenType.LITERAL,
+                                                Property.TOKEN_TYPE to TokenType.ION_LITERAL,
                                                 Property.TOKEN_VALUE to ion.newNull()))
     }
 
@@ -729,6 +708,239 @@ class ParserErrorsTest : TestBase() {
     }
 
     @Test
+    fun orderByMissingBYAndSortSpec() {
+        checkInputThrowingParserException("SELECT a FROM tb ORDER",
+                                          ErrorCode.PARSE_EXPECTED_TOKEN_TYPE,
+                                          mapOf(Property.LINE_NUMBER to 1L,
+                                                Property.COLUMN_NUMBER to 23L,
+                                                Property.TOKEN_TYPE to TokenType.EOF,
+                                                Property.EXPECTED_TOKEN_TYPE to TokenType.BY,
+                                                Property.TOKEN_VALUE to ion.newSymbol("EOF"))
+        )
+    }
+
+    @Test
+    fun orderByMissingBy() {
+        checkInputThrowingParserException("SELECT a FROM tb ORDER foo",
+                                          ErrorCode.PARSE_EXPECTED_TOKEN_TYPE,
+                                          mapOf(Property.LINE_NUMBER to 1L,
+                                                Property.COLUMN_NUMBER to 24L,
+                                                Property.TOKEN_TYPE to TokenType.IDENTIFIER,
+                                                Property.EXPECTED_TOKEN_TYPE to TokenType.BY,
+                                                Property.TOKEN_VALUE to ion.newSymbol("foo"))
+        )
+    }
+
+    @Test
+    fun orderByMissingSortSpec() {
+        checkInputThrowingParserException("SELECT a FROM tb ORDER BY",
+                                          ErrorCode.PARSE_UNEXPECTED_TERM,
+                                          mapOf(Property.LINE_NUMBER to 1L,
+                                                Property.COLUMN_NUMBER to 26L,
+                                                Property.TOKEN_TYPE to TokenType.EOF,
+                                                Property.TOKEN_VALUE to ion.newSymbol("EOF"))
+        )
+    }
+
+    @Test
+    fun orderByMultipleAttributesInSortSpec() {
+        checkInputThrowingParserException("SELECT a FROM tb ORDER BY foo bar",
+                                          ErrorCode.PARSE_UNEXPECTED_TOKEN,
+                                          mapOf(Property.LINE_NUMBER to 1L,
+                                                Property.COLUMN_NUMBER to 31L,
+                                                Property.TOKEN_TYPE to TokenType.IDENTIFIER,
+                                                Property.TOKEN_VALUE to ion.newSymbol("bar"))
+        )
+    }
+
+    @Test
+    fun orderByMultipleEmptyParsedCommaList() {
+        checkInputThrowingParserException("SELECT a FROM tb ORDER BY foo, ,",
+                                          ErrorCode.PARSE_UNEXPECTED_TERM,
+                                          mapOf(Property.LINE_NUMBER to 1L,
+                                                Property.COLUMN_NUMBER to 32L,
+                                                Property.TOKEN_TYPE to TokenType.COMMA,
+                                                Property.TOKEN_VALUE to ion.newSymbol(","))
+        )
+    }
+
+    @Test
+    fun orderByMissingAttributeName() {
+        checkInputThrowingParserException("SELECT a FROM tb ORDER BY asc, bar",
+                                          ErrorCode.PARSE_UNEXPECTED_TERM,
+                                          mapOf(Property.LINE_NUMBER to 1L,
+                                                Property.COLUMN_NUMBER to 27L,
+                                                Property.TOKEN_TYPE to TokenType.ASC,
+                                                Property.TOKEN_VALUE to ion.newSymbol("asc"))
+        )
+    }
+
+    @Test
+    fun orderByInvalidPunctuation() {
+        checkInputThrowingParserException("SELECT a FROM tb ORDER BY asc; bar",
+                                          ErrorCode.PARSE_UNEXPECTED_TERM,
+                                          mapOf(Property.LINE_NUMBER to 1L,
+                                                Property.COLUMN_NUMBER to 27L,
+                                                Property.TOKEN_TYPE to TokenType.ASC,
+                                                Property.TOKEN_VALUE to ion.newSymbol("asc"))
+        )
+    }
+
+    @Test
+    fun orderByMultipleOrderingSpecs() {
+        checkInputThrowingParserException("SELECT a FROM tb ORDER BY foo asc desc",
+                                          ErrorCode.PARSE_UNEXPECTED_TOKEN,
+                                          mapOf(Property.LINE_NUMBER to 1L,
+                                                Property.COLUMN_NUMBER to 35L,
+                                                Property.TOKEN_TYPE to TokenType.DESC,
+                                                Property.TOKEN_VALUE to ion.newSymbol("desc"))
+        )
+    }
+
+    @Test
+    fun orderByUnexpectedKeywordAsAttribute() {
+        checkInputThrowingParserException("SELECT a FROM tb ORDER BY SELECT",
+                                          ErrorCode.PARSE_UNEXPECTED_TERM,
+                                          mapOf(Property.LINE_NUMBER to 1L,
+                                                Property.COLUMN_NUMBER to 33L,
+                                                Property.TOKEN_TYPE to TokenType.EOF,
+                                                Property.TOKEN_VALUE to ion.newSymbol("EOF"))
+        )
+    }
+
+    @Test
+    fun onConflictUnexpectedTokenOnConflict() {
+        checkInputThrowingParserException("INSERT INTO foo VALUE 1 ON_CONFLICT WHERE bar DO NOTHING",
+                ErrorCode.PARSE_UNEXPECTED_TOKEN,
+                mapOf(Property.LINE_NUMBER to 1L,
+                        Property.COLUMN_NUMBER to 25L,
+                        Property.TOKEN_TYPE to TokenType.IDENTIFIER,
+                        Property.TOKEN_VALUE to ion.newSymbol("ON_CONFLICT"))
+        )
+    }
+
+    @Test
+    fun onConflictUnexpectedKeywordConflict() {
+        checkInputThrowingParserException("INSERT INTO foo VALUE 1 CONFLICT WHERE bar DO NOTHING",
+                ErrorCode.PARSE_UNEXPECTED_TOKEN,
+                mapOf(Property.LINE_NUMBER to 1L,
+                        Property.COLUMN_NUMBER to 25L,
+                        Property.TOKEN_TYPE to TokenType.KEYWORD,
+                        Property.TOKEN_VALUE to ion.newSymbol("conflict"))
+        )
+    }
+
+    @Test
+    fun onConflictUnexpectedKeywordWhen() {
+        checkInputThrowingParserException("INSERT INTO foo VALUE 1 ON CONFLICT WHEN bar DO NOTHING",
+                ErrorCode.PARSE_EXPECTED_WHERE_CLAUSE,
+                mapOf(Property.LINE_NUMBER to 1L,
+                        Property.COLUMN_NUMBER to 37L,
+                        Property.TOKEN_TYPE to TokenType.KEYWORD,
+                        Property.TOKEN_VALUE to ion.newSymbol("when"))
+        )
+    }
+
+    @Test
+    fun onConflictMissingOnConflictExpression() {
+        checkInputThrowingParserException("INSERT INTO foo VALUE 1 ON CONFLICT WHERE DO NOTHING",
+                ErrorCode.PARSE_UNEXPECTED_KEYWORD,
+                mapOf(Property.LINE_NUMBER to 1L,
+                        Property.COLUMN_NUMBER to 43L,
+                        Property.TOKEN_TYPE to TokenType.KEYWORD,
+                        Property.TOKEN_VALUE to ion.newSymbol("do_nothing"))
+        )
+    }
+
+    @Test
+    fun onConflictMissingConflictAction() {
+        checkInputThrowingParserException("INSERT INTO foo VALUE 1 ON CONFLICT WHERE bar",
+                ErrorCode.PARSE_EXPECTED_CONFLICT_ACTION,
+                mapOf(Property.LINE_NUMBER to 1L,
+                        Property.COLUMN_NUMBER to 37L,
+                        Property.TOKEN_TYPE to TokenType.KEYWORD,
+                        Property.TOKEN_VALUE to ion.newSymbol("where"))
+        )
+    }
+
+    @Test
+    fun onConflictInvalidConflictAction() {
+        checkInputThrowingParserException("INSERT INTO foo VALUE 1 ON CONFLICT WHERE bar DO SOMETHING",
+                ErrorCode.PARSE_EXPECTED_CONFLICT_ACTION,
+                mapOf(Property.LINE_NUMBER to 1L,
+                        Property.COLUMN_NUMBER to 37L,
+                        Property.TOKEN_TYPE to TokenType.KEYWORD,
+                        Property.TOKEN_VALUE to ion.newSymbol("where"))
+        )
+    }
+
+    @Test
+    fun atOnConflictUnexpectedTokenOnConflict() {
+        checkInputThrowingParserException("INSERT INTO foo VALUE 1 AT pos ON_CONFLICT WHERE bar DO NOTHING",
+                ErrorCode.PARSE_UNEXPECTED_TOKEN,
+                mapOf(Property.LINE_NUMBER to 1L,
+                        Property.COLUMN_NUMBER to 32L,
+                        Property.TOKEN_TYPE to TokenType.IDENTIFIER,
+                        Property.TOKEN_VALUE to ion.newSymbol("ON_CONFLICT"))
+        )
+    }
+
+    @Test
+    fun atOnConflictUnexpectedKeywordConflict() {
+        checkInputThrowingParserException("INSERT INTO foo VALUE 1 AT pos CONFLICT WHERE bar DO NOTHING",
+                ErrorCode.PARSE_UNEXPECTED_TOKEN,
+                mapOf(Property.LINE_NUMBER to 1L,
+                        Property.COLUMN_NUMBER to 32L,
+                        Property.TOKEN_TYPE to TokenType.KEYWORD,
+                        Property.TOKEN_VALUE to ion.newSymbol("conflict"))
+        )
+    }
+
+    @Test
+    fun atOnConflictUnexpectedKeywordWhen() {
+        checkInputThrowingParserException("INSERT INTO foo VALUE 1 AT pos ON CONFLICT WHEN bar DO NOTHING",
+                ErrorCode.PARSE_EXPECTED_WHERE_CLAUSE,
+                mapOf(Property.LINE_NUMBER to 1L,
+                        Property.COLUMN_NUMBER to 44L,
+                        Property.TOKEN_TYPE to TokenType.KEYWORD,
+                        Property.TOKEN_VALUE to ion.newSymbol("when"))
+        )
+    }
+
+    @Test
+    fun atOnConflictMissingOnConflictExpression() {
+        checkInputThrowingParserException("INSERT INTO foo VALUE 1 AT pos ON CONFLICT WHERE DO NOTHING",
+                ErrorCode.PARSE_UNEXPECTED_KEYWORD,
+                mapOf(Property.LINE_NUMBER to 1L,
+                        Property.COLUMN_NUMBER to 50L,
+                        Property.TOKEN_TYPE to TokenType.KEYWORD,
+                        Property.TOKEN_VALUE to ion.newSymbol("do_nothing"))
+        )
+    }
+
+    @Test
+    fun atOnConflictMissingConflictAction() {
+        checkInputThrowingParserException("INSERT INTO foo VALUE 1 AT pos ON CONFLICT WHERE bar",
+                ErrorCode.PARSE_EXPECTED_CONFLICT_ACTION,
+                mapOf(Property.LINE_NUMBER to 1L,
+                        Property.COLUMN_NUMBER to 44L,
+                        Property.TOKEN_TYPE to TokenType.KEYWORD,
+                        Property.TOKEN_VALUE to ion.newSymbol("where"))
+        )
+    }
+
+    @Test
+    fun atOnConflictInvalidConflictAction() {
+        checkInputThrowingParserException("INSERT INTO foo VALUE 1 AT pos ON CONFLICT WHERE bar DO SOMETHING",
+                ErrorCode.PARSE_EXPECTED_CONFLICT_ACTION,
+                mapOf(Property.LINE_NUMBER to 1L,
+                        Property.COLUMN_NUMBER to 44L,
+                        Property.TOKEN_TYPE to TokenType.KEYWORD,
+                        Property.TOKEN_VALUE to ion.newSymbol("where"))
+        )
+    }
+
+    @Test
     fun leftOvers() {
         checkInputThrowingParserException("5 5",
                                           ErrorCode.PARSE_UNEXPECTED_TOKEN,
@@ -824,7 +1036,7 @@ class ParserErrorsTest : TestBase() {
                                           ErrorCode.PARSE_EXPECTED_TYPE_NAME,
                                           mapOf(Property.LINE_NUMBER to 1L,
                                                 Property.COLUMN_NUMBER to 9L,
-                                                Property.TOKEN_TYPE to TokenType.LITERAL,
+                                                Property.TOKEN_TYPE to TokenType.ION_LITERAL,
                                                 Property.TOKEN_VALUE to ion.newNull()))
     }
 
@@ -1247,6 +1459,136 @@ class ParserErrorsTest : TestBase() {
             Property.TOKEN_VALUE to ion.newSymbol("EOF")))
 
     @Test
+    fun updateWithNestedSet() = checkInputThrowingParserException(
+        "UPDATE test SET x = SET test.y = 6",
+        ErrorCode.PARSE_UNEXPECTED_TERM,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 21L,
+            Property.TOKEN_TYPE to TokenType.KEYWORD,
+            Property.TOKEN_VALUE to ion.newSymbol("set")))
+
+    @Test
+    fun updateWithRemove() = checkInputThrowingParserException(
+        "UPDATE test SET x = REMOVE y",
+        ErrorCode.PARSE_UNEXPECTED_TERM,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 21L,
+            Property.TOKEN_TYPE to TokenType.KEYWORD,
+            Property.TOKEN_VALUE to ion.newSymbol("remove")))
+
+    @Test
+    fun updateWithInsert() = checkInputThrowingParserException(
+        "UPDATE test SET x = INSERT INTO foo VALUE 1",
+        ErrorCode.PARSE_UNEXPECTED_TERM,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 21L,
+            Property.TOKEN_TYPE to TokenType.KEYWORD,
+            Property.TOKEN_VALUE to ion.newSymbol("insert_into")))
+
+    @Test
+    fun updateWithDelete() = checkInputThrowingParserException(
+        "UPDATE test SET x = DELETE FROM y",
+        ErrorCode.PARSE_UNEXPECTED_TERM,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 21L,
+            Property.TOKEN_TYPE to TokenType.KEYWORD,
+            Property.TOKEN_VALUE to ion.newSymbol("delete")))
+
+    @Test
+    fun updateWithExec() = checkInputThrowingParserException(
+        "UPDATE test SET x = EXEC foo arg1, arg2",
+        ErrorCode.PARSE_UNEXPECTED_TERM,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 26L,
+            Property.TOKEN_TYPE to TokenType.IDENTIFIER,
+            Property.TOKEN_VALUE to ion.newSymbol("foo")))
+
+    @Test
+    fun updateWithCreateTable() = checkInputThrowingParserException(
+        "UPDATE test SET x = CREATE TABLE foo",
+        ErrorCode.PARSE_UNEXPECTED_TERM,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 21L,
+            Property.TOKEN_TYPE to TokenType.KEYWORD,
+            Property.TOKEN_VALUE to ion.newSymbol("create")))
+
+    @Test
+    fun updateWithDropTable() = checkInputThrowingParserException(
+        "UPDATE test SET x = DROP TABLE foo",
+        ErrorCode.PARSE_UNEXPECTED_TERM,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 21L,
+            Property.TOKEN_TYPE to TokenType.KEYWORD,
+            Property.TOKEN_VALUE to ion.newSymbol("drop")))
+
+    @Test
+    fun updateWithCreateIndex() = checkInputThrowingParserException(
+        "UPDATE test SET x = CREATE INDEX ON foo (x, y.z)",
+        ErrorCode.PARSE_UNEXPECTED_TERM,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 21L,
+            Property.TOKEN_TYPE to TokenType.KEYWORD,
+            Property.TOKEN_VALUE to ion.newSymbol("create")))
+
+    @Test
+    fun nestedRemove() = checkInputThrowingParserException(
+        "REMOVE REMOVE y",
+        ErrorCode.PARSE_INVALID_PATH_COMPONENT,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 8L,
+            Property.TOKEN_TYPE to TokenType.KEYWORD,
+            Property.TOKEN_VALUE to ion.newSymbol("remove")))
+
+    @Test
+    fun nestedInsertInto() = checkInputThrowingParserException(
+        "INSERT INTO foo VALUE INSERT INTO foo VALUE 1 AT bar",
+        ErrorCode.PARSE_UNEXPECTED_TERM,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 23L,
+            Property.TOKEN_TYPE to TokenType.KEYWORD,
+            Property.TOKEN_VALUE to ion.newSymbol("insert_into")))
+
+    @Test
+    fun selectAndRemove() = checkInputThrowingParserException(
+        "SELECT REMOVE foo FROM bar",
+        ErrorCode.PARSE_UNEXPECTED_TERM,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 8L,
+            Property.TOKEN_TYPE to TokenType.KEYWORD,
+            Property.TOKEN_VALUE to ion.newSymbol("remove")))
+
+    @Test
+    fun selectAndRemove2() = checkInputThrowingParserException(
+        "SELECT * FROM REMOVE foo",
+        ErrorCode.PARSE_UNEXPECTED_TERM,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 15L,
+            Property.TOKEN_TYPE to TokenType.KEYWORD,
+            Property.TOKEN_VALUE to ion.newSymbol("remove")))
+
+    @Test
+    fun updateWithDropIndex() = checkInputThrowingParserException(
+        "UPDATE test SET x = DROP INDEX bar ON foo",
+        ErrorCode.PARSE_UNEXPECTED_TERM,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 21L,
+            Property.TOKEN_TYPE to TokenType.KEYWORD,
+            Property.TOKEN_VALUE to ion.newSymbol("drop")))
+
+    @Test
     fun updateFromList() = checkInputThrowingParserException(
         "UPDATE x, y SET a = b",
         ErrorCode.PARSE_MISSING_OPERATION,
@@ -1255,6 +1597,88 @@ class ParserErrorsTest : TestBase() {
             Property.COLUMN_NUMBER to 9L,
             Property.TOKEN_TYPE to TokenType.COMMA,
             Property.TOKEN_VALUE to ion.newSymbol(",")))
+
+    @Test
+    fun insertValueMissingReturning() = checkInputThrowingParserException(
+            "INSERT INTO foo VALUE 1 MODIFIED OLD foo",
+            ErrorCode.PARSE_UNEXPECTED_TOKEN,
+            mapOf(Property.LINE_NUMBER to 1L,
+                Property.COLUMN_NUMBER to 25L,
+                Property.TOKEN_TYPE to TokenType.KEYWORD,
+                Property.TOKEN_VALUE to ion.newSymbol("modified_old")))
+
+    @Test
+    fun insertValueReturningMissingReturningElem() = checkInputThrowingParserException(
+            "INSERT INTO foo VALUE 1 RETURNING",
+            ErrorCode.PARSE_EXPECTED_RETURNING_CLAUSE,
+            mapOf(Property.LINE_NUMBER to 1L,
+                    Property.COLUMN_NUMBER to 34L,
+                    Property.TOKEN_TYPE to TokenType.EOF,
+                    Property.TOKEN_VALUE to ion.newSymbol("EOF")))
+
+    @Test
+    fun insertValueReturningMissingReturningMapping() = checkInputThrowingParserException(
+            "INSERT INTO foo VALUE 1 RETURNING *",
+            ErrorCode.PARSE_EXPECTED_RETURNING_CLAUSE,
+            mapOf(Property.LINE_NUMBER to 1L,
+                    Property.COLUMN_NUMBER to 35L,
+                    Property.TOKEN_TYPE to TokenType.STAR,
+                    Property.TOKEN_VALUE to ion.newSymbol("*")))
+
+    @Test
+    fun insertValueReturningMissingReturningColumn() = checkInputThrowingParserException(
+            "INSERT INTO foo VALUE 1 RETURNING MODIFIED OLD",
+            ErrorCode.PARSE_UNEXPECTED_TERM,
+            mapOf(Property.LINE_NUMBER to 1L,
+                    Property.COLUMN_NUMBER to 47L,
+                    Property.TOKEN_TYPE to TokenType.EOF,
+                    Property.TOKEN_VALUE to ion.newSymbol("EOF")))
+
+
+    @Test
+    fun insertValueMultiReturningMissingReturningColumn() = checkInputThrowingParserException(
+            "INSERT INTO foo VALUE 1 RETURNING MODIFIED OLD , ALL OLD *",
+            ErrorCode.PARSE_UNEXPECTED_TERM,
+            mapOf(Property.LINE_NUMBER to 1L,
+                    Property.COLUMN_NUMBER to 48L,
+                    Property.TOKEN_TYPE to TokenType.COMMA,
+                    Property.TOKEN_VALUE to ion.newSymbol(",")))
+
+    @Test
+    fun insertValueMisSpellReturning() = checkInputThrowingParserException(
+            "INSERT INTO foo VALUE 1 RETURING MODIFIED OLD foo",
+            ErrorCode.PARSE_UNEXPECTED_TOKEN,
+            mapOf(Property.LINE_NUMBER to 1L,
+                    Property.COLUMN_NUMBER to 25L,
+                    Property.TOKEN_TYPE to TokenType.IDENTIFIER,
+                    Property.TOKEN_VALUE to ion.newSymbol("RETURING")))
+
+    @Test
+    fun insertValueReturningInvalidReturningMapping() = checkInputThrowingParserException(
+            "INSERT INTO foo VALUE 1 RETURNING UPDATED OLD foo",
+            ErrorCode.PARSE_EXPECTED_RETURNING_CLAUSE,
+            mapOf(Property.LINE_NUMBER to 1L,
+                    Property.COLUMN_NUMBER to 35L,
+                    Property.TOKEN_TYPE to TokenType.IDENTIFIER,
+                    Property.TOKEN_VALUE to ion.newSymbol("UPDATED")))
+
+    @Test
+    fun insertValueReturningInvalidReturningColumn() = checkInputThrowingParserException(
+            "INSERT INTO foo VALUE 1 RETURNING MODIFIED OLD ;",
+            ErrorCode.PARSE_UNEXPECTED_TERM,
+            mapOf(Property.LINE_NUMBER to 1L,
+                    Property.COLUMN_NUMBER to 48L,
+                    Property.TOKEN_TYPE to TokenType.SEMICOLON,
+                    Property.TOKEN_VALUE to ion.newSymbol(";")))
+
+    @Test
+    fun insertValueReturningMultipleReturningColumn() = checkInputThrowingParserException(
+            "INSERT INTO foo VALUE 1 RETURNING MODIFIED OLD a,b",
+            ErrorCode.PARSE_EXPECTED_RETURNING_CLAUSE,
+            mapOf(Property.LINE_NUMBER to 1L,
+                    Property.COLUMN_NUMBER to 50L,
+                    Property.TOKEN_TYPE to TokenType.IDENTIFIER,
+                    Property.TOKEN_VALUE to ion.newSymbol("b")))
 
     @Test
     fun createTableWithKeyword() = checkInputThrowingParserException(
@@ -1295,6 +1719,16 @@ class ParserErrorsTest : TestBase() {
             Property.COLUMN_NUMBER to 17L,
             Property.TOKEN_TYPE to TokenType.OPERATOR,
             Property.TOKEN_VALUE to ion.newSymbol("-")))
+
+    @Test
+    fun nestedCreateTable() = checkInputThrowingParserException(
+        "CREATE TABLE CREATE TABLE foo",
+        ErrorCode.PARSE_UNEXPECTED_TOKEN,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 14L,
+            Property.TOKEN_TYPE to TokenType.KEYWORD,
+            Property.TOKEN_VALUE to ion.newSymbol("create")))
 
     @Test
     fun dropTableWithOperatorAfterIdentifier() = checkInputThrowingParserException(
@@ -1425,6 +1859,7 @@ class ParserErrorsTest : TestBase() {
             Property.COLUMN_NUMBER to 12L,
             Property.TOKEN_TYPE to TokenType.LEFT_PAREN,
             Property.TOKEN_VALUE to ion.newSymbol("(")))
+
     @Test
     fun dropIndexWithParenthesisAtTail() = checkInputThrowingParserException(
         "DROP INDEX goo ON foo (bar)",
@@ -1444,7 +1879,6 @@ class ParserErrorsTest : TestBase() {
             Property.COLUMN_NUMBER to 23L,
             Property.TOKEN_TYPE to TokenType.OPERATOR,
             Property.TOKEN_VALUE to ion.newSymbol("+")))
-
 
     @Test
     fun insertValueWithCollection() = checkInputThrowingParserException(
@@ -1546,4 +1980,179 @@ class ParserErrorsTest : TestBase() {
             Property.TOKEN_TYPE to TokenType.EOF,
             Property.TOKEN_VALUE to ion.newSymbol("EOF")))
 
+    //****************************************
+    // EXEC clause parsing errors
+    //****************************************
+
+    @Test
+    fun execNoStoredProcedureProvided() = checkInputThrowingParserException(
+        "EXEC",
+        ErrorCode.PARSE_NO_STORED_PROCEDURE_PROVIDED,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 5L,
+            Property.TOKEN_TYPE to TokenType.EOF,
+            Property.TOKEN_VALUE to ion.newSymbol("EOF")))
+
+    @Test
+    fun execCommaBetweenStoredProcedureAndArg() = checkInputThrowingParserException(
+        "EXEC foo, arg0, arg1",
+        ErrorCode.PARSE_UNEXPECTED_TERM,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 9L,
+            Property.TOKEN_TYPE to TokenType.COMMA,
+            Property.TOKEN_VALUE to ion.newSymbol(",")))
+
+    @Test
+    fun execArgTrailingComma() = checkInputThrowingParserException(
+        "EXEC foo arg0, arg1,",
+        ErrorCode.PARSE_UNEXPECTED_TERM,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 21L,
+            Property.TOKEN_TYPE to TokenType.EOF,
+            Property.TOKEN_VALUE to ion.newSymbol("EOF")))
+
+    @Test
+    fun execUnexpectedParen() = checkInputThrowingParserException(
+        "EXEC foo()",
+        ErrorCode.PARSE_UNEXPECTED_TOKEN,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 9L,
+            Property.TOKEN_TYPE to TokenType.LEFT_PAREN,
+            Property.TOKEN_VALUE to ion.newSymbol("(")))
+
+    @Test
+    fun execUnexpectedParenWithArgs() = checkInputThrowingParserException(
+        "EXEC foo(arg0, arg1)",
+        ErrorCode.PARSE_UNEXPECTED_TOKEN,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 9L,
+            Property.TOKEN_TYPE to TokenType.LEFT_PAREN,
+            Property.TOKEN_VALUE to ion.newSymbol("(")))
+
+    @Test
+    fun execAtUnexpectedLocation() = checkInputThrowingParserException(
+        "EXEC EXEC",
+        ErrorCode.PARSE_UNEXPECTED_TERM,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 6L,
+            Property.TOKEN_TYPE to TokenType.KEYWORD,
+            Property.TOKEN_VALUE to ion.newSymbol("exec")))
+
+    @Test
+    fun execAtUnexpectedLocationAfterExec() = checkInputThrowingParserException(
+        "EXEC foo EXEC",
+        ErrorCode.PARSE_UNEXPECTED_TERM,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 10L,
+            Property.TOKEN_TYPE to TokenType.KEYWORD,
+            Property.TOKEN_VALUE to ion.newSymbol("exec")))
+
+    // TODO: The token in the error message here should be "exec" instead of "undrop".
+    //  Check this issue for more details. https://github.com/partiql/partiql-lang-kotlin/issues/372
+    @Test
+    fun execAtUnexpectedLocationInExpression() = checkInputThrowingParserException(
+        "SELECT * FROM (EXEC undrop 'foo')",
+        ErrorCode.PARSE_UNEXPECTED_TERM,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 21L,
+            Property.TOKEN_TYPE to TokenType.IDENTIFIER,
+            Property.TOKEN_VALUE to ion.newSymbol("undrop")))
+
+    @Test
+    fun invalidTypeIntForDateString() = checkInputThrowingParserException(
+        "DATE 2012",
+        ErrorCode.PARSE_UNEXPECTED_TOKEN,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 6L,
+            Property.TOKEN_TYPE to TokenType.LITERAL,
+            Property.TOKEN_VALUE to ion.newInt(2012)))
+
+    @Test
+    fun invalidTypeIntForDateString2() = checkInputThrowingParserException(
+        "DATE 2012-08-28",
+        ErrorCode.PARSE_UNEXPECTED_TOKEN,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 6L,
+            Property.TOKEN_TYPE to TokenType.LITERAL,
+            Property.TOKEN_VALUE to ion.newInt(2012)))
+
+    @Test
+    fun invalidTypeTimestampForDateString() = checkInputThrowingParserException(
+        "DATE `2012-08-28`",
+        ErrorCode.PARSE_UNEXPECTED_TOKEN,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 6L,
+            Property.TOKEN_TYPE to TokenType.ION_LITERAL,
+            Property.TOKEN_VALUE to ion.newTimestamp(Timestamp.forDay(2012, 8, 28))))
+
+    @Test
+    fun invalidDateStringFormat() = checkInputThrowingParserException(
+        "DATE 'date_string'",
+        ErrorCode.PARSE_INVALID_DATE_STRING,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 6L,
+            Property.TOKEN_TYPE to TokenType.LITERAL,
+            Property.TOKEN_VALUE to ion.newString("date_string")))
+
+    @Test
+    fun invalidDateStringFormatMissingDashes() = checkInputThrowingParserException(
+        "DATE '20210310'",
+        ErrorCode.PARSE_INVALID_DATE_STRING,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 6L,
+            Property.TOKEN_TYPE to TokenType.LITERAL,
+            Property.TOKEN_VALUE to ion.newString("20210310")))
+
+    @Test
+    fun invalidDateStringFormatUnexpectedColons() = checkInputThrowingParserException(
+        "DATE '2021:03:10'",
+        ErrorCode.PARSE_INVALID_DATE_STRING,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 6L,
+            Property.TOKEN_TYPE to TokenType.LITERAL,
+            Property.TOKEN_VALUE to ion.newString("2021:03:10")))
+
+    @Test
+    fun invalidDateStringFormatInvalidDate() = checkInputThrowingParserException(
+        "DATE '2021-02-29'",
+        ErrorCode.PARSE_INVALID_DATE_STRING,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 6L,
+            Property.TOKEN_TYPE to TokenType.LITERAL,
+            Property.TOKEN_VALUE to ion.newString("2021-02-29")))
+
+    @Test
+    fun invalidDateStringFormatMMDDYYYY() = checkInputThrowingParserException(
+        "DATE '03-10-2021'",
+        ErrorCode.PARSE_INVALID_DATE_STRING,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 6L,
+            Property.TOKEN_TYPE to TokenType.LITERAL,
+            Property.TOKEN_VALUE to ion.newString("03-10-2021")))
+
+    @Test
+    fun invalidDateStringFormatDDMMYYYY() = checkInputThrowingParserException(
+        "DATE '10-03-2021'",
+        ErrorCode.PARSE_INVALID_DATE_STRING,
+        mapOf(
+            Property.LINE_NUMBER to 1L,
+            Property.COLUMN_NUMBER to 6L,
+            Property.TOKEN_TYPE to TokenType.LITERAL,
+            Property.TOKEN_VALUE to ion.newString("10-03-2021")))
 }
