@@ -14,7 +14,13 @@
 
 package org.partiql.runner
 
+import com.amazon.ion.IonType
 import com.amazon.ion.system.IonSystemBuilder
+import com.amazon.ion.system.IonTextWriterBuilder
+import org.junit.jupiter.api.extension.AfterAllCallback
+import org.junit.jupiter.api.extension.ExtendWith
+import org.junit.jupiter.api.extension.ExtensionContext
+import org.junit.jupiter.api.extension.TestWatcher
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ArgumentsSource
 import org.partiql.lang.CompilerPipeline
@@ -33,6 +39,53 @@ private val ION = IonSystemBuilder.standard().build()
 
 private val COERCE_EVAL_MODE_COMPILE_OPTIONS = CompileOptions.build { typingMode(TypingMode.PERMISSIVE) }
 private val ERROR_EVAL_MODE_COMPILE_OPTIONS = CompileOptions.build { typingMode(TypingMode.LEGACY) }
+
+class ConformanceTestReportGenerator : TestWatcher, AfterAllCallback {
+    var failingTests = emptySet<String>()
+    var passingTests = emptySet<String>()
+    var ignoredTests = emptySet<String>()
+    override fun testFailed(context: ExtensionContext?, cause: Throwable?) {
+        failingTests += context?.displayName ?: ""
+        super.testFailed(context, cause)
+    }
+
+    override fun testSuccessful(context: ExtensionContext?) {
+        passingTests += context?.displayName ?: ""
+        super.testSuccessful(context)
+    }
+
+    override fun afterAll(p0: ExtensionContext?) {
+        val file = File("./conformance_test_results.ion")
+        val outputStream = file.outputStream()
+        val writer = IonTextWriterBuilder.pretty().build(outputStream)
+        writer.stepIn(IonType.STRUCT) // in: outer struct
+
+        // set struct field for passing
+        writer.setFieldName("passing")
+        writer.stepIn(IonType.LIST)
+        passingTests.forEach { passingTest ->
+            writer.writeString(passingTest)
+        }
+        writer.stepOut()
+        // set struct field for failing
+        writer.setFieldName("failing")
+        writer.stepIn(IonType.LIST)
+        failingTests.forEach { failingTest ->
+            writer.writeString(failingTest)
+        }
+        writer.stepOut()
+
+        // set struct field for ignored
+        writer.setFieldName("ignored")
+        writer.stepIn(IonType.LIST)
+        ignoredTests.forEach { ignoredTest ->
+            writer.writeString(ignoredTest)
+        }
+        writer.stepOut()
+
+        writer.stepOut() // out: outer struct
+    }
+}
 
 /*
 The skip lists defined in this file show how the current Kotlin implementation diverges from the PartiQL spec. Most of
@@ -250,15 +303,11 @@ class TestRunner {
 
         val allTestCases = filesAsNamespaces.flatMap { ns ->
             allTestsFromNamespace(ns)
-        }.filter {
-            // Currently, just filtering the expected failing tests defined by the `skipList`. As an enhancement to the
-            // test runner, we could instead run the failing tests to assert they still fail.
-            !skipList.contains(Pair(it.name, it.compileOptions))
         }
         return allTestCases
     }
 
-    private fun runEvalTestCase(evalTC: EvalTestCase) {
+    private fun runEvalTestCase(evalTC: EvalTestCase, expectedFailedTests: List<Pair<String, CompileOptions>>) {
         val compilerPipeline = CompilerPipeline.builder().compileOptions(evalTC.compileOptions).build()
         val globals = ExprValue.of(evalTC.env).bindings
         val session = EvaluationSession.build { globals(globals) }
@@ -268,7 +317,7 @@ class TestRunner {
             when (evalTC.assertion) {
                 is Assertion.EvaluationSuccess -> {
                     val actualResultAsIon = actualResult.toIonValue(ION)
-                    if (!PartiQLEqualityChecker().areEqual(evalTC.assertion.expectedResult, actualResultAsIon)) {
+                    if (!expectedFailedTests.contains(Pair(evalTC.name, evalTC.compileOptions)) && !PartiQLEqualityChecker().areEqual(evalTC.assertion.expectedResult, actualResultAsIon)) {
                         val testName = evalTC.name
                         val evalMode = when (evalTC.compileOptions.typingMode) {
                             TypingMode.PERMISSIVE -> "COERCE_EVAL_MODE_COMPILE_OPTIONS"
@@ -278,13 +327,17 @@ class TestRunner {
                     }
                 }
                 is Assertion.EvaluationFailure -> {
-                    error("Expected error to be thrown but none was thrown.\n${evalTC.name}\nActual result: ${actualResult.toIonValue(ION)}")
+                    if (!expectedFailedTests.contains(Pair(evalTC.name, evalTC.compileOptions))) {
+                        error("Expected error to be thrown but none was thrown.\n${evalTC.name}\nActual result: ${actualResult.toIonValue(ION)}")
+                    }
                 }
             }
         } catch (e: SqlException) {
             when (evalTC.assertion) {
                 is Assertion.EvaluationSuccess -> {
-                    error("Expected success but exception thrown: $e")
+                    if (!expectedFailedTests.contains(Pair(evalTC.name, evalTC.compileOptions))) {
+                        error("Expected success but exception thrown: $e")
+                    }
                 }
                 is Assertion.EvaluationFailure -> {
                     // Expected failure and test threw when evaluated
@@ -293,31 +346,35 @@ class TestRunner {
         }
     }
 
-    private fun runEvalEquivTestCase(evalEquivTestCase: EvalEquivTestCase) {
+    private fun runEvalEquivTestCase(evalEquivTestCase: EvalEquivTestCase, expectedFailedTests: List<Pair<String, CompileOptions>>) {
         val compilerPipeline = CompilerPipeline.builder().compileOptions(evalEquivTestCase.compileOptions).build()
         val globals = ExprValue.of(evalEquivTestCase.env).bindings
         val session = EvaluationSession.build { globals(globals) }
         val statements = evalEquivTestCase.statements
 
         statements.forEach { statement ->
-            val expression = compilerPipeline.compile(statement)
             try {
+                val expression = compilerPipeline.compile(statement)
                 val actualResult = expression.eval(session)
                 when (evalEquivTestCase.assertion) {
                     is Assertion.EvaluationSuccess -> {
                         val actualResultAsIon = actualResult.toIonValue(ION)
-                        if (!PartiQLEqualityChecker().areEqual(evalEquivTestCase.assertion.expectedResult, actualResultAsIon)) {
+                        if (!expectedFailedTests.contains(Pair(evalEquivTestCase.name, evalEquivTestCase.compileOptions)) && !PartiQLEqualityChecker().areEqual(evalEquivTestCase.assertion.expectedResult, actualResultAsIon)) {
                             error("Expected and actual results differ:\nExpected: ${evalEquivTestCase.assertion.expectedResult}\nActual:   $actualResultAsIon\nMode: ${evalEquivTestCase.compileOptions.typingMode}")
                         }
                     }
                     is Assertion.EvaluationFailure -> {
-                        error("Expected error to be thrown but none was thrown.\n${evalEquivTestCase.name}\nActual result: ${actualResult.toIonValue(ION)}")
+                        if (!expectedFailedTests.contains(Pair(evalEquivTestCase.name, evalEquivTestCase.compileOptions))) {
+                            error("Expected error to be thrown but none was thrown.\n${evalEquivTestCase.name}\nActual result: ${actualResult.toIonValue(ION)}")
+                        }
                     }
                 }
             } catch (e: SqlException) {
                 when (evalEquivTestCase.assertion) {
                     is Assertion.EvaluationSuccess -> {
-                        error("Expected success but exception thrown: $e")
+                        if (!expectedFailedTests.contains(Pair(evalEquivTestCase.name, evalEquivTestCase.compileOptions))) {
+                            error("Expected success but exception thrown: $e")
+                        }
                     }
                     is Assertion.EvaluationFailure -> {
                         // Expected failure and test threw when evaluated
@@ -327,35 +384,67 @@ class TestRunner {
         }
     }
 
-    // Tests the eval tests with the Kotlin implementation
-    @ParameterizedTest
-    @ArgumentsSource(EvalTestCases::class)
-    fun validatePartiQLEvalTestData(tc: TestCase) {
-        when (tc) {
-            is EvalTestCase -> TestRunner().runEvalTestCase(tc)
-            else -> error("Unsupported test case category")
+    class DefaultTestRunner() {
+        // Tests the eval tests with the Kotlin implementation
+        @ParameterizedTest(name = "{arguments}")
+        @ArgumentsSource(EvalTestCases::class)
+        fun validatePartiQLEvalTestData(tc: TestCase) {
+            when (tc) {
+                is EvalTestCase -> TestRunner().runEvalTestCase(tc, LANG_KOTLIN_EVAL_SKIP_LIST)
+                else -> error("Unsupported test case category")
+            }
+        }
+
+        // Tests the eval equivalence tests with the Kotlin implementation
+        @ParameterizedTest(name = "{arguments}")
+        @ArgumentsSource(EvalEquivTestCases::class)
+        fun validatePartiQLEvalEquivTestData(tc: TestCase) {
+            when (tc) {
+                is EvalEquivTestCase -> TestRunner().runEvalEquivTestCase(tc, LANG_KOTLIN_EVAL_EQUIV_SKIP_LIST)
+                else -> error("Unsupported test case category")
+            }
+        }
+    }
+
+    /**
+     * Runs the conformance tests without a fail list, so we can document the passing/failing tests in the conformance
+     * report.
+     *
+     * These tests are excluded from normal testing/building unless the `conformanceReport` gradle property is
+     * specified.
+     */
+    @ExtendWith(ConformanceTestReportGenerator::class)
+    class ConformanceTestsReportRunner {
+        // Tests the eval tests with the Kotlin implementation
+        @ParameterizedTest(name = "{arguments}")
+        @ArgumentsSource(EvalTestCases::class)
+        fun validatePartiQLEvalTestData(tc: TestCase) {
+            when (tc) {
+                is EvalTestCase -> TestRunner().runEvalTestCase(tc, emptyList())
+                else -> error("Unsupported test case category")
+            }
+        }
+
+        // Tests the eval equivalence tests with the Kotlin implementation
+        @ParameterizedTest(name = "{arguments}")
+        @ArgumentsSource(EvalEquivTestCases::class)
+        fun validatePartiQLEvalEquivTestData(tc: TestCase) {
+            when (tc) {
+                is EvalEquivTestCase -> TestRunner().runEvalEquivTestCase(tc, emptyList())
+                else -> error("Unsupported test case category")
+            }
         }
     }
 
     class EvalTestCases : ArgumentsProviderBase() {
         override fun getParameters(): List<Any> {
-            return TestRunner().loadTests(PARTIQL_EVAL_TEST_DATA_DIR, LANG_KOTLIN_EVAL_SKIP_LIST)
-        }
-    }
-
-    // Tests the eval equivalence tests with the Kotlin implementation
-    @ParameterizedTest
-    @ArgumentsSource(EvalEquivTestCases::class)
-    fun validatePartiQLEvalEquivTestData(tc: TestCase) {
-        when (tc) {
-            is EvalEquivTestCase -> TestRunner().runEvalEquivTestCase(tc)
-            else -> error("Unsupported test case category")
+            return TestRunner().loadTests(PARTIQL_EVAL_TEST_DATA_DIR)
         }
     }
 
     class EvalEquivTestCases : ArgumentsProviderBase() {
         override fun getParameters(): List<Any> {
-            return TestRunner().loadTests(PARTIQL_EVAL_EQUIV_TEST_DATA_DIR, LANG_KOTLIN_EVAL_EQUIV_SKIP_LIST)
+            return TestRunner().loadTests(PARTIQL_EVAL_EQUIV_TEST_DATA_DIR)
         }
     }
 }

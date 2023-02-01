@@ -24,6 +24,9 @@ sealed class TestCase {
     abstract val env: IonStruct
     abstract val compileOptions: CompileOptions
     abstract val assertion: Assertion
+    override fun toString(): String {
+        return name + ", compileOption: " + compileOptions.typingMode
+    }
 }
 
 data class EvalTestCase(

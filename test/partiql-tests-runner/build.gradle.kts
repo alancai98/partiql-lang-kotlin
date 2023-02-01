@@ -19,6 +19,7 @@ plugins {
 }
 
 dependencies {
+    implementation(Deps.ionElement)
     testImplementation(project(":lang"))
 }
 
@@ -33,4 +34,8 @@ tasks.test {
     useJUnitPlatform()
     environment(Env.PARTIQL_EVAL, file("$tests/eval/").absolutePath)
     environment(Env.PARTIQL_EQUIV, file("$tests/eval-equiv/").absolutePath)
+
+    if (!project.hasProperty("conformanceReport")) {
+        exclude("org/partiql/runner/TestRunner\$ConformanceTestsReportRunner.class")
+    }
 }
