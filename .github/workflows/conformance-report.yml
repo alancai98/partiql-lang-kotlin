@@ -90,9 +90,9 @@ jobs:
         run: cd ../
       # Run conformance report comparison. Generates `comparison_report.md`
       - run: |
-          ARGS="./conformance_test_results.ion ${GITHUB_WORKSPACE}/main/test/partiql-tests-runner/conformance_test_results.ion ${GITHUB_SHA} ${GITHUB_SHA} ./comparison_report.md"
+          ARGS="./conformance_test_results.ion $GITHUB_WORKSPACE/main/test/partiql-tests-runner/conformance_test_results.ion $GITHUB_SHA ${GITHUB_SHA} ./comparison_report.md"
           echo $ARGS
-          gradle :test:partiql-tests-runner:run --args=$ARGS
+          gradle :test:partiql-tests-runner:run --args="$ARGS"
       # Print conformance report to GitHub actions workflow summary page
       - name: print markdown in run
         run: cat ./test/partiql-tests-runner/comparison_report.md >> $GITHUB_STEP_SUMMARY
