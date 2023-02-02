@@ -16,6 +16,11 @@
 plugins {
     id(Plugins.conventions)
     id(Plugins.library)
+    application
+}
+
+application {
+    mainClass.set("org.partiql.runner.MainKt")
 }
 
 dependencies {

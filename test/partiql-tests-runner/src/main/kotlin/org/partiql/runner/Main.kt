@@ -4,7 +4,8 @@ import com.amazon.ionelement.api.loadSingleElement
 import java.io.File
 
 fun main(args: Array<String>) {
-
+    val path = System.getProperty("user.dir")
+    println("Working Directory = $path")
     if (args.size != 5) {
         println(args.size)
         error(
