@@ -80,15 +80,15 @@ jobs:
           ref: main
       - run: echo $GITHUB_WORKSPACE
       - name: cd main
-        run: pwd && cd main/partiql-lang-kotlin
+        run: pwd && cd main
       # Run the conformance tests (i.e. `gradle test`) and save to an Ion file.
       - name: gradle test of the conformance tests (can fail) and save to Ion file
         continue-on-error: true
         run: gradle :test:partiql-tests-runner:test -PconformanceReport
       - name: cd out of main/partiql/lang-kotlin
-        run: cd ../../
+        run: cd ../
       # Run conformance report comparison. Generates `comparison_report.md`
-      - run: gradle :test:partiql-tests-runner:run --args='./conformance_test_results.ion ../../main/test/partiql-tests-runner/conformance_test_results_new.ion ${{ github.event.pull_request.head.sha }} ${GITHUB_SHA} ./comparison_report.md'
+      - run: gradle :test:partiql-tests-runner:run --args='./conformance_test_results.ion ../main/test/partiql-tests-runner/conformance_test_results_new.ion ${{ github.event.pull_request.head.sha }} ${GITHUB_SHA} ./comparison_report.md'
       # Print conformance report to GitHub actions workflow summary page
       - name: print markdown in run
         run: cat ./test/partiql-tests-runner/comparison_report.md >> $GITHUB_STEP_SUMMARY
