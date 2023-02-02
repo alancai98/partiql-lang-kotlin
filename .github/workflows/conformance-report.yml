@@ -88,7 +88,7 @@ jobs:
         run: |
           gradle :test:partiql-tests-runner:test -PconformanceReport
           pwd
-          cat ./test/partiql-tests-runner/comparison_report.md
+          cat ./test/partiql-tests-runner/conformance_test_results.ion
       - name: cd out of main/partiql/lang-kotlin
         run: cd ../
       # Run conformance report comparison. Generates `comparison_report.md`
