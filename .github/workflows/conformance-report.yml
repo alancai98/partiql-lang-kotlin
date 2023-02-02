@@ -90,6 +90,12 @@ jobs:
         run: cd ../
       # Run conformance report comparison. Generates `comparison_report.md`
       - run: |
+          search_dir=$GITHUB_WORKSPACE
+          for entry in "$search_dir"/*
+          do
+            echo "$entry"
+          done
+      - run: |
           ARGS="./conformance_test_results.ion $GITHUB_WORKSPACE/main/test/partiql-tests-runner/conformance_test_results.ion $GITHUB_SHA ${GITHUB_SHA} ./comparison_report.md"
           echo $ARGS
           gradle :test:partiql-tests-runner:run --args="$ARGS"
