@@ -87,7 +87,7 @@ jobs:
       - name: cd out of main/partiql/lang-kotlin
         run: cd ../
       # Run conformance report comparison. Generates `comparison_report.md`
-      - run: gradle :test:partiql-tests-runner:run --args='./conformance_test_results.ion ../main/test/partiql-tests-runner/conformance_test_results.ion ${{ github.event.pull_request.head.sha }} ${GITHUB_SHA} ./comparison_report.md'
+      - run: gradle :test:partiql-tests-runner:run --args='./conformance_test_results.ion $GITHUB_WORKSPACE/main/test/partiql-tests-runner/conformance_test_results.ion ${{ github.event.pull_request.head.sha }} ${GITHUB_SHA} ./comparison_report.md'
       # Print conformance report to GitHub actions workflow summary page
       - name: print markdown in run
         run: cat ./test/partiql-tests-runner/comparison_report.md >> $GITHUB_STEP_SUMMARY
