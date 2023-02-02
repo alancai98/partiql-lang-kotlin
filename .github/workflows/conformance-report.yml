@@ -2,7 +2,7 @@ name: Conformance Test Report Generation
 on: [push, pull_request]
 
 env:
-  ARGS: "./conformance_test_results.ion ${GITHUB_WORKSPACE}/main/test/partiql-tests-runner/conformance_test_results.ion ${GITHUB_SHA} ${GITHUB_SHA} ./comparison_report.md"
+  ARGS: ./conformance_test_results.ion ${GITHUB_WORKSPACE}/main/test/partiql-tests-runner/conformance_test_results.ion ${GITHUB_SHA} ${GITHUB_SHA} ./comparison_report.md
 
 jobs:
   conformance-report:
