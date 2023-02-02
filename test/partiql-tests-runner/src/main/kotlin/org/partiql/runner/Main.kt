@@ -53,7 +53,7 @@ fun main(args: Array<String>) {
 
     comparisonReportFile.writeText(
         """### Conformance comparison report
-| | main ($origCommitId) | $newCommitId | +/- |
+| | HEAD ($origCommitId) | $newCommitId | +/- |
 | --- | ---: | ---: | ---: |
 | % Passing | ${"%.2f".format(origPassingPercent)}% | ${"%.2f".format(newPassingPercent)}% | ${"%.2f".format(newPassingPercent - origPassingPercent)}% |
 | :white_check_mark: Passing | $numOrigPassing | $numOrigPassing | ${numNewPassing - numOrigFailing} |
@@ -69,9 +69,9 @@ Number passing in both: ${passingInBoth.count()}
 
 Number failing in both: ${failingInBoth.count()}
 
-Number passing in main but now fail: ${passingOrigFailingNew.count()}
+Number passing in HEAD ($origCommitId) but now fail: ${passingOrigFailingNew.count()}
 
-Number failing in main but now pass: ${failureOrigPassingNew.count()}
+Number failing in HEAD ($origCommitId) but now pass: ${failureOrigPassingNew.count()}
 """
     )
 

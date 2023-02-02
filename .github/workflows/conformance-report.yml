@@ -55,52 +55,28 @@ jobs:
           distribution: 'corretto'
           java-version: 17
           cache: gradle
-#      # Download conformance report from `main` to create comparison report. If `main` has no report, use a backup
-#      # report (stored in partiql-conformance-tests/backup_conformance_report.json). Alternatively, we could consider
-#      # - pulling `main` branch and rerun the tests
-#      # - pulling latest release and rerun the tests
-#      # - compare to an empty file
-#      # - don't perform comparisons
-#      - name: Download conformance_test_results.ion from `main` branch
-#        uses: dawidd6/action-download-artifact@v2
-#        id: download-report
-#        continue-on-error: true
-#        with:
-#          workflow: conformance-report.yml
-#          branch: main
-#      - name: backup case if download fails
-#        if: ${{ steps.download-report.outcome == 'failure' }}
-#        run: mkdir -p artifact && cp -r ./partiql-conformance-tests/backup_conformance_report.json ./artifact/conformance_test_results_new.ion
-      #- name: Create dir
-      #  run: mkdir -p main
-      #- name: cd dir
-      #  run: cd main
       - uses: actions/checkout@v3
         with:
           submodules: recursive
-          path: main
-          ref: main
-#      - name: cd main
-#        run: cd main
+          path: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
       # Run the conformance tests (i.e. `gradle test`) and save to an Ion file.
       - name: gradle test of the conformance tests (can fail) and save to Ion file
         continue-on-error: true
         run: |
           pwd
-          cd main
+          cd ${{ github.event.pull_request.head.sha }}
           pwd
           gradle :test:partiql-tests-runner:test -PconformanceReport --continue
           pwd
           cat ./test/partiql-tests-runner/conformance_test_results.ion
-#      - name: cd out of main/partiql/lang-kotlin
-#        run: cd ../
       # Run conformance report comparison. Generates `comparison_report.md`
       - run: |
           find . -name conformance_test_results.ion -print
       - run: |
           pwd
           find . -name conformance_test_results.ion -print
-          ARGS="./conformance_test_results.ion $GITHUB_WORKSPACE/main/test/partiql-tests-runner/conformance_test_results.ion $GITHUB_SHA ${GITHUB_SHA} ./comparison_report.md"
+          ARGS="./conformance_test_results.ion $GITHUB_WORKSPACE/${{ github.event.pull_request.head.sha }}/test/partiql-tests-runner/conformance_test_results.ion ${{ github.event.pull_request.head.sha }} $GITHUB_SHA ./comparison_report.md"
           echo $ARGS
           gradle :test:partiql-tests-runner:run --args="$ARGS"
       # Print conformance report to GitHub actions workflow summary page
