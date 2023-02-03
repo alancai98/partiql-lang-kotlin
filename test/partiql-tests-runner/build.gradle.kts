@@ -20,7 +20,7 @@ plugins {
 }
 
 application {
-    mainClass.set("org.partiql.runner.MainKt")
+    mainClass.set("org.partiql.runner.ConformanceComparisonKt")
 }
 
 dependencies {
