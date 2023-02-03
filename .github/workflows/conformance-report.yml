@@ -94,5 +94,5 @@ jobs:
         with:
           comment-id: ${{ steps.fc.outputs.comment-id }}
           issue-number: ${{ github.event.pull_request.number }}
-          body-file: ${{ PATH_TO_TEST_RUNNER }}/${{ COMPARISON_REPORT_NAME }}
+          body-file: ${{ env.PATH_TO_TEST_RUNNER }}/${{ env.COMPARISON_REPORT_NAME }}
           edit-mode: replace
