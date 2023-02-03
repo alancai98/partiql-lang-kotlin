@@ -1,6 +1,11 @@
 name: Conformance Test Report Generation
 on: [push, pull_request]
 
+env:
+  PATH_TO_TEST_RUNNER: test/partiql-tests-runner/
+  CONFORMANCE_REPORT_NAME: conformance_test_results.ion
+  COMPARISON_REPORT_NAME: comparison_report.md
+
 jobs:
   conformance-report:
     name: Create conformance report for `push` and `pull_request` events
@@ -20,12 +25,12 @@ jobs:
       # Run the conformance tests (i.e. `gradle test`) and save to an Ion file.
       - name: gradle test of the conformance tests (can fail) and save to Ion file
         continue-on-error: true
-        run: gradle :test:partiql-tests-runner:test -PconformanceReport
+        run: gradle :test:partiql-tests-runner:test --tests "*ConformanceTestsReportRunner" -PconformanceReport
       # Upload conformance report for comparison with future runs
       - name: Upload `conformance_test_results.ion`
         uses: actions/upload-artifact@v3
         with:
-          path: ./test/partiql-tests-runner/conformance_test_results.ion
+          path: $PATH_TO_TEST_RUNNER/$CONFORMANCE_REPORT_NAME
       # Cache the conformance report for `conformance-report-comparison` job (pull_request event only)
       - name: Cache conformance report
         if: github.event_name == 'pull_request'
@@ -65,14 +70,14 @@ jobs:
         continue-on-error: true
         run: |
           cd ${{ github.event.pull_request.base.sha }}
-          gradle :test:partiql-tests-runner:test -PconformanceReport --continue
+          gradle :test:partiql-tests-runner:test --tests "*ConformanceTestsReportRunner" -PconformanceReport
       # Run conformance report comparison. Generates `comparison_report.md`
       - run: |
-          ARGS="./conformance_test_results.ion $GITHUB_WORKSPACE/${{ github.event.pull_request.base.sha }}/test/partiql-tests-runner/conformance_test_results.ion ${{ github.event.pull_request.base.sha }} $GITHUB_SHA ./comparison_report.md"
+          ARGS="$CONFORMANCE_REPORT_NAME $GITHUB_WORKSPACE/${{ github.event.pull_request.base.sha }}/$PATH_TO_TEST_RUNNER/$CONFORMANCE_REPORT_NAME ${{ github.event.pull_request.base.sha }} $GITHUB_SHA $COMPARISON_REPORT_NAME"
           gradle :test:partiql-tests-runner:run --args="$ARGS"
       # Print conformance report to GitHub actions workflow summary page
       - name: print markdown in run
-        run: cat ./test/partiql-tests-runner/comparison_report.md >> $GITHUB_STEP_SUMMARY
+        run: cat $PATH_TO_TEST_RUNNER/$COMPARISON_REPORT_NAME >> $GITHUB_STEP_SUMMARY
       # Find comment w/ conformance comparison if previous comment published
       - name: Find Comment
         uses: peter-evans/find-comment@v2
@@ -89,5 +94,5 @@ jobs:
         with:
           comment-id: ${{ steps.fc.outputs.comment-id }}
           issue-number: ${{ github.event.pull_request.number }}
-          body-file: ./test/partiql-tests-runner/comparison_report.md
+          body-file: $PATH_TO_TEST_RUNNER/$COMPARISON_REPORT_NAME
           edit-mode: replace
